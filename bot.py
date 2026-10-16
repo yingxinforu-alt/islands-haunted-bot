@@ -17,6 +17,7 @@ Automatic flows:
 """
 from __future__ import annotations
 
+import asyncio
 import datetime
 import json
 import os
@@ -125,6 +126,25 @@ async def _edit_vote_card(thread: discord.Thread, post: dict, active: bool):
         return False
 
 
+async def _send_to_forum_thread(thread: discord.Thread, **kwargs):
+    """Send after Discord has finished creating a Forum starter message.
+
+    Discord can dispatch ``on_thread_create`` just before the author's starter
+    message is ready. During that short window it rejects replies with error
+    40058. Retry only that transient response; real permission errors still
+    surface immediately.
+    """
+    retry_delays = (1, 2, 4, 8)
+    for delay in retry_delays:
+        try:
+            return await thread.send(**kwargs)
+        except discord.Forbidden as exc:
+            if exc.code != 40058:
+                raise
+            await asyncio.sleep(delay)
+    return await thread.send(**kwargs)
+
+
 async def _create_vote_card(thread: discord.Thread, result: dict):
     description = (
         "This post is registered for the **ISLANDS Halloween UGC Challenge**.\n\n"
@@ -143,7 +163,7 @@ async def _create_vote_card(thread: discord.Thread, result: dict):
         footer += f" · Explorer +{result['explorer']}"
     footer += f" · Entry {result.get('entry_no', '?')}/{config.UGC_TOTAL_CAP}"
     embed.set_footer(text=footer)
-    msg = await thread.send(embed=embed, view=UGCVoteView(0))
+    msg = await _send_to_forum_thread(thread, embed=embed, view=UGCVoteView(0))
     con = db.connect()
     scoring.set_ugc_vote_message(con, thread.id, msg.id)
     con.close()
@@ -178,7 +198,9 @@ async def process_forum_thread(thread: discord.Thread):
                     description="Vote for this Halloween entry below.",
                     color=0xFF6B00,
                 )
-                msg = await thread.send(embed=embed, view=UGCVoteView(count))
+                msg = await _send_to_forum_thread(
+                    thread, embed=embed, view=UGCVoteView(count)
+                )
                 con = db.connect()
                 scoring.set_ugc_vote_message(con, thread.id, msg.id)
                 con.close()
@@ -201,9 +223,12 @@ async def process_forum_thread(thread: discord.Thread):
         elif result["status"] == "ineligible":
             # One explanatory message only: the thread is recorded as non-scoring.
             try:
-                await thread.send(
-                    f"🎃 Halloween tag detected, but this post is **not a scoring entry**.\n"
-                    f"Reason: {result['reason']}"
+                await _send_to_forum_thread(
+                    thread,
+                    content=(
+                        f"🎃 Halloween tag detected, but this post is **not a scoring entry**.\n"
+                        f"Reason: {result['reason']}"
+                    ),
                 )
             except discord.HTTPException:
                 pass
