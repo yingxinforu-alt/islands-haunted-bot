@@ -69,7 +69,7 @@ NODES = [
 ]
 
 # ---- Quiz ----
-QUIZ_OPEN_HOURS = 24
+QUIZ_OPEN_HOURS = 2/60
 
 # ---- Storage / UI ----
 DB_PATH = os.getenv("DB_PATH", "data/haunted.db")
