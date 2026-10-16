@@ -1,6 +1,8 @@
 """Persistent Discord UI components for quiz answers and UGC voting."""
 from __future__ import annotations
 
+import json
+
 import discord
 
 import config
@@ -49,7 +51,11 @@ class QuizButton(discord.ui.Button):
             return
         con.close()
 
-        msg = f"✅ Locked in: **{self.letter}**\nYour choice stays private until the answer is revealed."
+        msg = (
+            f"✅ Locked in: **{self.letter}**\n"
+            "Your choice stays private until the answer is revealed.\n"
+            "After the reveal, use **Check My Result** to see your result and points."
+        )
         if result["first_haunt"]:
             msg += f"\n👻 **Welcome to the Haunted House!** First Haunt Bonus: **+{result['first_haunt']}**"
         if result["explorer"]:
@@ -58,6 +64,70 @@ class QuizButton(discord.ui.Button):
         await notifications.announce_nodes(
             interaction.client, result["new_nodes"], fallback_channel=interaction.channel
         )
+
+
+class QuizResultView(discord.ui.View):
+    def __init__(self, quiz_id: str):
+        super().__init__(timeout=None)
+        self.add_item(QuizResultButton(quiz_id))
+
+
+class QuizResultButton(discord.ui.Button):
+    def __init__(self, quiz_id: str):
+        super().__init__(
+            label="Check My Result",
+            emoji="🔍",
+            style=discord.ButtonStyle.primary,
+            custom_id=f"quiz_result:{quiz_id}",
+        )
+        self.quiz_id = quiz_id
+
+    async def callback(self, interaction: discord.Interaction):
+        con = db.connect()
+        posted = con.execute(
+            "SELECT correct_choice,options_json,revealed_at FROM quiz_posted WHERE quiz_id=?",
+            (self.quiz_id,),
+        ).fetchone()
+        answer = con.execute(
+            "SELECT choice,correct FROM quiz_answers WHERE quiz_id=? AND user_id=?",
+            (self.quiz_id, str(interaction.user.id)),
+        ).fetchone()
+        con.close()
+
+        if not posted or not posted["revealed_at"]:
+            await interaction.response.send_message(
+                "⏰ This result is not available until the answer is revealed.",
+                ephemeral=True,
+            )
+            return
+        if not answer:
+            await interaction.response.send_message(
+                "You didn't answer this quiz.", ephemeral=True
+            )
+            return
+
+        options = json.loads(posted["options_json"] or "{}")
+        choice = answer["choice"]
+        correct = posted["correct_choice"]
+        choice_text = options.get(choice, "")
+        correct_text = options.get(correct, "")
+
+        if answer["correct"]:
+            message = (
+                "✅ **You got it right!**\n"
+                f"Your answer: **{choice} · {choice_text}**\n"
+                f"Personal points: **+{config.PTS_QUIZ}**\n"
+                f"Community contribution: **+{config.COMM_QUIZ}**"
+            )
+        else:
+            message = (
+                "❌ **Not quite!**\n"
+                f"Your answer: **{choice} · {choice_text}**\n"
+                f"Correct answer: **{correct} · {correct_text}**\n"
+                "Quiz points: **+0**\n"
+                "Community contribution: **+0**"
+            )
+        await interaction.response.send_message(message, ephemeral=True)
 
 
 class UGCVoteView(discord.ui.View):

@@ -35,7 +35,7 @@ import config
 import db
 import notifications
 import scoring
-from views import QuizView, UGCVoteView
+from views import QuizResultView, QuizView, UGCVoteView
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 GUILD_ID = int(os.getenv("GUILD_ID") or 0)
@@ -44,7 +44,7 @@ CH_UGC = int(os.getenv("CHANNEL_UGC") or 0)  # Existing collectible-sharing Foru
 CH_PROGRESS = int(os.getenv("CHANNEL_PROGRESS") or 0)
 ADMIN_ROLE_ID = int(os.getenv("ADMIN_ROLE_ID") or 0)
 UGC_TAG_ID = int(os.getenv("UGC_TAG_ID") or 0)
-UGC_TAG_NAME = (os.getenv("UGC_TAG_NAME") or "Hollywood").strip()
+UGC_TAG_NAME = (os.getenv("UGC_TAG_NAME") or "Halloween").strip()
 
 # No Message Content or Server Members privileged intent required.
 intents = discord.Intents.default()
@@ -690,12 +690,13 @@ async def reveal_closed_quizzes():
             description=(
                 f"{row['question_text']}\n\n"
                 f"**Correct answer: {correct} · {correct_text}**\n\n"
-                f"Community accuracy: {accuracy}"
+                f"Community accuracy: {accuracy}\n\n"
+                "Use **Check My Result** below to privately see your answer and points."
             ),
             color=0x00C853,
         )
         try:
-            await channel.send(embed=reveal)
+            await channel.send(embed=reveal, view=QuizResultView(row["quiz_id"]))
         except discord.HTTPException:
             pass
 
@@ -709,12 +710,15 @@ async def on_ready():
         # One global persistent UGC vote handler works for every Forum thread.
         bot.add_view(UGCVoteView())
         for row in con.execute(
-            "SELECT quiz_id,message_id FROM quiz_posted WHERE revealed_at IS NULL"
+            "SELECT quiz_id,message_id,revealed_at FROM quiz_posted"
         ):
-            bot.add_view(
-                QuizView(row["quiz_id"]),
-                message_id=int(row["message_id"]) if row["message_id"] else None,
-            )
+            if row["revealed_at"]:
+                bot.add_view(QuizResultView(row["quiz_id"]))
+            else:
+                bot.add_view(
+                    QuizView(row["quiz_id"]),
+                    message_id=int(row["message_id"]) if row["message_id"] else None,
+                )
         _views_registered = True
     con.close()
 
