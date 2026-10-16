@@ -1,0 +1,18 @@
+{
+  "_comment": "Quiz is now posted manually with /postquiz and reveals automatically 24h later. Dates are not required.",
+  "_rules": [
+    "id must be unique (q01, q02, ...)",
+    "correct must be A/B/C/D",
+    "For time-sensitive leaderboard/price questions, put a time anchor in text and keep an evidence screenshot internally"
+  ],
+  "questions": [
+    {
+      "id": "q01",
+      "text": "Which IP is ranked #2 on the US Price Drops leaderboard right now?\n(Open the ISLANDS App to find out 👀)",
+      "options": {"A": "Molly", "B": "Hirono", "C": "Skullpanda", "D": "Crybaby"},
+      "correct": "B",
+      "evidence": "",
+      "_note": "Example only — replace before launch."
+    }
+  ]
+}
